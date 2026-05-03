@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebAI Bridge</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg:        #0d0d18;
+      --surface:   #16162a;
+      --border:    #252545;
+      --accent:    #5b5bd6;
+      --accent-h:  #6e6ee8;
+      --user-bg:   #1a2e52;
+      --ai-bg:     #1a1a2e;
+      --text:      #e2e2f0;
+      --text-dim:  #8888aa;
+      --green:     #4caf82;
+      --orange:    #e8a045;
+      --red:       #e84545;
+      --radius:    14px;
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+                   'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Header ─────────────────────────────────────────────── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    .logo {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+      color: var(--text);
+    }
+    .logo span { color: var(--accent); }
+
+    .header-gap { flex: 1; }
+
+    /* 状态指示器 */
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      transition: background 0.3s;
+    }
+    .dot.ready   { background: var(--green); }
+    .dot.loading { background: var(--orange); animation: pulse 1.2s ease-in-out infinite; }
+    .dot.error   { background: var(--red); }
+
+    @keyframes pulse {
+      0%,100% { opacity: 1; }
+      50%      { opacity: 0.25; }
+    }
+
+    /* 按钮组 */
+    .btn-group { display: flex; gap: 8px; }
+
+    .btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      border-radius: 8px;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
+      white-space: nowrap;
+    }
+    .btn:hover  { border-color: var(--accent); color: var(--text); }
+    .btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .btn.primary:hover { background: var(--accent-h); border-color: var(--accent-h); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── 消息区 ─────────────────────────────────────────────── */
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      scroll-behavior: smooth;
+    }
+
+    #messages::-webkit-scrollbar { width: 4px; }
+    #messages::-webkit-scrollbar-track { background: transparent; }
+    #messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .msg-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      max-width: 820px;
+      width: 100%;
+    }
+    .msg-row.user  { align-self: flex-end;  flex-direction: row-reverse; }
+    .msg-row.ai    { align-self: flex-start; }
+    .msg-row.error { align-self: flex-start; }
+
+    /* 头像 */
+    .avatar {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .msg-row.user  .avatar { background: var(--accent); color: #fff; }
+    .msg-row.ai    .avatar { background: #2a2a4a; color: var(--accent); }
+    .msg-row.error .avatar { background: #3a1a1a; color: var(--red); }
+
+    /* 气泡 */
+    .bubble {
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      font-size: 15px;
+      line-height: 1.7;
+      max-width: 680px;
+      word-break: break-word;
+    }
+    .msg-row.user  .bubble {
+      background: var(--user-bg);
+      border-bottom-right-radius: 4px;
+    }
+    .msg-row.ai    .bubble {
+      background: var(--ai-bg);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 4px;
+    }
+    .msg-row.error .bubble {
+      background: #2a1010;
+      border: 1px solid #5a2222;
+      color: #ff9090;
+      border-bottom-left-radius: 4px;
+    }
+
+    /* Markdown 样式 */
+    .bubble h1,.bubble h2,.bubble h3,.bubble h4 {
+      margin: 10px 0 6px;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+    .bubble h3 { font-size: 16px; }
+    .bubble h4 { font-size: 15px; }
+    .bubble p  { margin-bottom: 8px; }
+    .bubble p:last-child { margin-bottom: 0; }
+    .bubble ul,.bubble ol { padding-left: 22px; margin-bottom: 8px; }
+    .bubble li { margin-bottom: 3px; }
+    .bubble strong { color: #c8c8ff; }
+    .bubble em { color: #aaaacc; font-style: italic; }
+
+    .bubble code {
+      background: #252545;
+      color: #c8d4ff;
+      padding: 2px 6px;
+      border-radius: 5px;
+      font-size: 13px;
+      font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+    }
+    .bubble pre {
+      background: #12122a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      overflow-x: auto;
+      margin: 10px 0;
+      position: relative;
+    }
+    .bubble pre code {
+      background: none;
+      padding: 0;
+      font-size: 13px;
+      color: #b8c8f8;
+    }
+    .lang-label {
+      position: absolute;
+      top: 8px; right: 10px;
+      font-size: 11px;
+      color: var(--text-dim);
+      user-select: none;
+    }
+    .bubble blockquote {
+      border-left: 3px solid var(--accent);
+      padding-left: 12px;
+      color: var(--text-dim);
+      margin: 8px 0;
+    }
+    .bubble hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 12px 0;
+    }
+
+    /* 时间戳 */
+    .ts {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-top: 4px;
+      padding: 0 4px;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .msg-row:hover .ts { opacity: 1; }
+
+    /* 打字动画 */
+    .typing-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      align-self: flex-start;
+    }
+    .typing-dots {
+      background: var(--ai-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      border-bottom-left-radius: 4px;
+      padding: 14px 18px;
+      display: flex;
+      gap: 5px;
+    }
+    .typing-dots span {
+      width: 6px; height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: bounce 1.3s ease-in-out infinite;
+    }
+    .typing-dots span:nth-child(2) { animation-delay: 0.18s; }
+    .typing-dots span:nth-child(3) { animation-delay: 0.36s; }
+
+    @keyframes bounce {
+      0%,80%,100% { transform: translateY(0); opacity: 0.6; }
+      40%          { transform: translateY(-7px); opacity: 1; }
+    }
+
+    /* 欢迎屏 */
+    #welcome {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      gap: 14px;
+      color: var(--text-dim);
+    }
+    #welcome .big-icon { font-size: 52px; }
+    #welcome h2 { font-size: 22px; font-weight: 500; color: var(--text); }
+    #welcome p  { font-size: 14px; text-align: center; max-width: 340px; line-height: 1.6; }
+
+    /* ── 输入区 ─────────────────────────────────────────────── */
+    #input-area {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 14px 20px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      flex-shrink: 0;
+    }
+
+    #user-input {
+      flex: 1;
+      background: #1e1e34;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 11px 16px;
+      color: var(--text);
+      font-size: 15px;
+      font-family: inherit;
+      resize: none;
+      outline: none;
+      min-height: 46px;
+      max-height: 200px;
+      line-height: 1.5;
+      transition: border-color 0.2s;
+    }
+    #user-input:focus { border-color: var(--accent); }
+    #user-input::placeholder { color: var(--text-dim); }
+
+    #send-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      width: 46px;
+      height: 46px;
+      cursor: pointer;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.2s, transform 0.1s;
+    }
+    #send-btn:hover   { background: var(--accent-h); }
+    #send-btn:active  { transform: scale(0.94); }
+    #send-btn:disabled { background: #2a2a4a; cursor: not-allowed; transform: none; }
+
+    .input-hint {
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-dim);
+      padding: 4px 0 0;
+    }
+    .input-hint kbd {
+      background: var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: inherit;
+      font-size: 11px;
+    }
+
+    /* ── 系统提示词按钮 + 面板 ─────────────────────────────── */
+    .sys-btn {
+      margin-left: 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 10px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 150ms ease;
+    }
+    .sys-btn:hover {
+      background: rgba(138, 99, 255, 0.08);
+      color: var(--text);
+      border-color: var(--accent);
+    }
+    .sys-btn.active {
+      background: rgba(138, 99, 255, 0.12);
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+    #sys-indicator {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: transparent; margin-left: 2px;
+    }
+    #sys-indicator.on { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+
+    #sys-panel {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 20px;
+    }
+    #sys-prompt-input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      line-height: 1.5;
+      resize: vertical;
+      min-height: 80px;
+      outline: none;
+    }
+    #sys-prompt-input:focus { border-color: var(--accent); }
+    .sys-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 8px;
+    }
+    .sys-hint { color: var(--text-muted); font-size: 11px; }
+    .sys-save {
+      padding: 6px 16px;
+      border: none;
+      border-radius: 6px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 12px;
+      cursor: pointer;
+      transition: opacity 150ms;
+    }
+    .sys-save:hover { opacity: 0.85; }
+    .sys-save.saved { background: #22c55e; }
+
+    /* ── 自动转发面板 ────────────────────────────────────────── */
+    #auto-panel {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 20px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      flex-shrink: 0;
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+    .panel-label { font-weight: 500; color: var(--text); }
+    .toggle {
+      position: relative; width: 38px; height: 21px;
+      background: var(--border); border-radius: 11px; cursor: pointer;
+      transition: background 0.22s; flex-shrink: 0;
+    }
+    .toggle.on { background: var(--accent); }
+    .toggle::after {
+      content: ''; position: absolute;
+      top: 3px; left: 3px;
+      width: 15px; height: 15px;
+      background: #fff; border-radius: 50%;
+      transition: transform 0.22s;
+    }
+    .toggle.on::after { transform: translateX(17px); }
+    .toggle-wrap { display: flex; align-items: center; gap: 8px; }
+    .delay-wrap { display: flex; align-items: center; gap: 6px; }
+    .delay-wrap input {
+      width: 58px; background: #1e1e34; border: 1px solid var(--border);
+      border-radius: 6px; padding: 3px 8px; color: var(--text);
+      font-size: 13px; font-family: inherit; text-align: center; outline: none;
+      transition: border-color 0.2s;
+    }
+    .delay-wrap input:focus { border-color: var(--accent); }
+    #queue-badge {
+      margin-left: auto;
+      background: #1e1e34; border: 1px solid var(--border);
+      border-radius: 12px; padding: 3px 12px;
+      font-size: 12px; color: var(--text-dim);
+      transition: border-color 0.3s, color 0.3s;
+    }
+    #queue-badge.has-items {
+      border-color: var(--accent); color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Header ──────────────────────────────────────────── -->
+  <header>
+    <div class="logo">Gemini <span>代理</span></div>
+
+    <div class="header-gap"></div>
+
+    <div class="status-badge">
+      <div class="dot loading" id="status-dot"></div>
+      <span id="status-text">连接中…</span>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn" id="btn-new-chat" onclick="newChat()" disabled>新对话</button>
+    </div>
+  </header>
+
+  <!-- ── 自动转发面板 ──────────────────────────────────────── -->
+  <div id="auto-panel">
+    <div class="toggle-wrap">
+      <div class="toggle" id="auto-toggle" onclick="toggleAutoForward()"></div>
+      <span class="panel-label">自动转发</span>
+    </div>
+    <div class="delay-wrap">
+      <span>随机延迟</span>
+      <input type="number" id="delay-input" value="3" min="0" max="300" title="最大随机延迟秒数">
+      <span>秒</span>
+    </div>
+    <div id="queue-badge">队列: 0</div>
+    <button id="sys-btn" class="sys-btn" onclick="toggleSysPanel()" title="配置系统提示词">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 15a3 3 0 100-6 3 3 0 000 6z"></path>
+        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"></path>
+      </svg>
+      <span>系统提示词</span>
+      <span id="sys-indicator"></span>
+    </button>
+  </div>
+
+  <!-- ── 系统提示词面板（可折叠）──────────────────────────── -->
+  <div id="sys-panel" style="display:none;">
+    <textarea id="sys-prompt-input" placeholder="系统提示词将自动拼在每条外部 API 转发消息前面。留空不启用。最多 4000 字。" maxlength="4000" rows="5"></textarea>
+    <div class="sys-row">
+      <div class="sys-hint"><span id="sys-char-count">0</span> / 4000 字符</div>
+      <button class="sys-save" onclick="saveSystemPrompt()">保存</button>
+    </div>
+  </div>
+
+  <!-- ── 消息区 ───────────────────────────────────────────── -->
+  <div id="messages">
+    <div id="welcome">
+      <div class="big-icon">✦</div>
+      <h2>Gemini 代理</h2>
+      <p id="welcome-desc">等待浏览器插件连接…</p>
+    </div>
+  </div>
+
+  <!-- ── 输入区 ───────────────────────────────────────────── -->
+  <div id="input-area">
+    <textarea
+      id="user-input"
+      placeholder="输入消息… (Ctrl+Enter 发送)"
+      rows="1"
+      disabled
+    ></textarea>
+    <button id="send-btn" onclick="sendMessage()" disabled>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="22" y1="2" x2="11" y2="13"></line>
+        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+      </svg>
+    </button>
+  </div>
+  <div class="input-hint"><kbd>Enter</kbd> 换行 &nbsp;·&nbsp; <kbd>Ctrl</kbd>+<kbd>Enter</kbd> 发送</div>
+
+  <script>
+    // ── 状态管理 ──────────────────────────────────────────────
+let isBusy = false;
+let statusInterval = null;
+let autoForwardOn = false;
+let autoForwardTimer = null;
+
+async function pollStatus() {
+  try {
+    const r = await fetch('/api/status');
+    const data = await r.json();
+    updateStatusUI(data);
+  } catch {
+    updateStatusUI({ status: 'error', error: '无法连接本地服务器' });
+  }
+}
+
+function updateStatusUI({ status, error }) {
+  const dot       = document.getElementById('status-dot');
+  const text      = document.getElementById('status-text');
+  const input     = document.getElementById('user-input');
+  const sendBtn   = document.getElementById('send-btn');
+  const newChatBtn = document.getElementById('btn-new-chat');
+  const welcomeDesc = document.getElementById('welcome-desc');
+
+  dot.className = 'dot';
+
+  if (status === 'ready') {
+    dot.classList.add('ready');
+    text.textContent = '插件已连接';
+    input.disabled = false;
+    sendBtn.disabled = isBusy;
+    newChatBtn.disabled = isBusy;
+    hideWelcome();
+    clearInterval(statusInterval);
+    statusInterval = setInterval(pollStatus, 10_000);
+  } else if (status === 'no_extension') {
+    dot.classList.add('error');
+    text.textContent = '插件未连接';
+    input.disabled = true;
+    sendBtn.disabled = true;
+    newChatBtn.disabled = true;
+    if (welcomeDesc) {
+      welcomeDesc.innerHTML =
+        '请安装插件并在 <strong>gemini.google.com</strong> 页面上启用：<br>' +
+        '<code style="background:#252545;padding:2px 6px;border-radius:4px;font-size:13px">' +
+        '扮展程序 → 加载已解压的扩展程序 → 选 extension/</code>';
+    }
+  } else if (status === 'error') {
+    dot.classList.add('error');
+    text.textContent = '服务器错误';
+    input.disabled = true;
+    sendBtn.disabled = true;
+    newChatBtn.disabled = true;
+  } else {
+    dot.classList.add('loading');
+    text.textContent = '连接中…';
+  }
+}
+
+    function hideWelcome() {
+      const w = document.getElementById('welcome');
+      if (w) w.remove();
+    }
+
+    // ── 自动转发控制 ──────────────────────────────────────────
+    function toggleAutoForward() {
+      autoForwardOn = !autoForwardOn;
+      document.getElementById('auto-toggle').classList.toggle('on', autoForwardOn);
+      if (autoForwardOn) {
+        scheduleQueuePoll(0);
+      } else {
+        if (autoForwardTimer) { clearTimeout(autoForwardTimer); autoForwardTimer = null; }
+      }
+    }
+
+    function scheduleQueuePoll(delaySec) {
+      if (autoForwardTimer) clearTimeout(autoForwardTimer);
+      autoForwardTimer = setTimeout(pollQueue, delaySec * 1000);
+    }
+
+    async function pollQueue() {
+      autoForwardTimer = null;
+      if (!autoForwardOn) return;
+      if (!isBusy) {
+        try {
+          const r = await fetch('/api/queue/next');
+          const { item } = await r.json();
+          if (item) {
+            await processQueueItem(item);
+            const maxDelay = Math.max(0, Number(document.getElementById('delay-input').value) || 0);
+            scheduleQueuePoll(Math.random() * maxDelay);
+            return;
+          }
+        } catch { /* 静默 */ }
+      }
+      scheduleQueuePoll(1);
+    }
+
+    async function processQueueItem({ qid, message }) {
+      setBusy(true);
+      hideWelcome();
+      appendUserMsg(message);
+      const typingEl = appendTyping();
+      let donePayload = { qid, message };
+      try {
+        const r = await fetch('/api/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message }),
+        });
+        const data = await r.json();
+        if (data.id) shownIds.add(data.id);
+        typingEl.remove();
+        if (!r.ok || data.error) {
+          appendAiError(data.error || '转发失败');
+          donePayload.error = data.error || '转发失败';
+        } else {
+          appendAiMsg(data.text);
+          donePayload.text = data.text;
+        }
+      } catch (err) {
+        typingEl.remove();
+        appendAiError('转发失败：' + err.message);
+        donePayload.error = err.message;
+      } finally {
+        setBusy(false);
+      }
+      try {
+        await fetch('/api/queue/done', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(donePayload),
+        });
+      } catch { /* 静默 */ }
+      updateQueueBadge();
+    }
+
+    async function updateQueueBadge() {
+      try {
+        const r = await fetch('/api/queue/length');
+        const { length } = await r.json();
+        const badge = document.getElementById('queue-badge');
+        badge.textContent = `队列: ${length}`;
+        badge.classList.toggle('has-items', length > 0);
+      } catch { /* 静默 */ }
+    }
+
+    // ── 新对话 ────────────────────────────────────────────────
+    async function newChat() {
+      if (isBusy) return;
+      setBusy(true);
+      try {
+        await fetch('/api/new-chat', { method: 'POST' });
+        document.getElementById('messages').innerHTML = '';
+        shownIds.clear();
+        // 清空服务器历史
+        await fetch('/api/history/clear', { method: 'POST' }).catch(() => {});
+      } catch (err) {
+        appendAiError('新建对话失败：' + err.message);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    // ── 发消息（走 /api/send 直接 WS 路径，不经过队列）─────────
+    async function sendMessage() {
+      const inputEl = document.getElementById('user-input');
+      const text = inputEl.value.trim();
+      if (!text || isBusy) return;
+      inputEl.value = '';
+      autoGrow(inputEl);
+      await doSend(text);
+    }
+
+    async function doSend(text) {
+      setBusy(true);
+      hideWelcome();
+      appendUserMsg(text);
+      const typingEl = appendTyping();
+      try {
+        const r = await fetch('/api/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text }),
+        });
+        const data = await r.json();
+        if (data.id) shownIds.add(data.id);
+        typingEl.remove();
+        if (!r.ok || data.error) appendAiError(data.error || '请求失败');
+        else appendAiMsg(data.text);
+      } catch (err) {
+        typingEl.remove();
+        appendAiError('请求失败：' + err.message);
+      } finally {
+        setBusy(false);
+        document.getElementById('user-input').focus();
+      }
+    }
+
+    // ── UI 辅助 ───────────────────────────────────────────────
+    function setBusy(v) {
+      isBusy = v;
+      document.getElementById('send-btn').disabled = v;
+      document.getElementById('btn-new-chat').disabled = v;
+      document.getElementById('user-input').disabled = v;
+    }
+
+    function now() {
+      return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function appendUserMsg(text, hid) {
+      const msgs = document.getElementById('messages');
+      const row = createRow('user');
+      if (hid) row.dataset.hid = hid;
+      row.innerHTML = `
+        <div class="avatar">你</div>
+        <div>
+          <div class="bubble">${escapeHtml(text)}</div>
+          <div class="ts">${now()}</div>
+        </div>`;
+      msgs.appendChild(row);
+      scrollBottom();
+    }
+
+    function appendAiMsg(text, hid) {
+      const msgs = document.getElementById('messages');
+      const row = createRow('ai');
+      if (hid) row.dataset.hid = hid;
+      row.innerHTML = `
+        <div class="avatar">G</div>
+        <div>
+          <div class="bubble">${renderMarkdown(text)}</div>
+          <div class="ts">${now()}</div>
+        </div>`;
+      msgs.appendChild(row);
+      scrollBottom();
+    }
+
+    function appendAiError(msg, hid) {
+      const msgs = document.getElementById('messages');
+      const row = createRow('error');
+      if (hid) row.dataset.hid = hid;
+      row.innerHTML = `
+        <div class="avatar">!</div>
+        <div class="bubble">⚠ ${escapeHtml(msg)}</div>`;
+      msgs.appendChild(row);
+      scrollBottom();
+    }
+
+    function appendTyping(hid) {
+      const msgs = document.getElementById('messages');
+      const row = document.createElement('div');
+      row.className = 'typing-row';
+      if (hid) row.dataset.hid = hid;
+      row.innerHTML = `
+        <div class="avatar" style="background:#2a2a4a;color:var(--accent)">G</div>
+        <div class="typing-dots">
+          <span></span><span></span><span></span>
+        </div>`;
+      msgs.appendChild(row);
+      scrollBottom();
+      return row;
+    }
+
+    function createRow(type) {
+      const d = document.createElement('div');
+      d.className = `msg-row ${type}`;
+      return d;
+    }
+
+    function scrollBottom() {
+      const msgs = document.getElementById('messages');
+      msgs.scrollTop = msgs.scrollHeight;
+    }
+
+    // ── Markdown 渲染（轻量，无外部依赖）────────────────────
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function renderMarkdown(raw) {
+      let s = escapeHtml(raw);
+
+      // 代码块（先处理，避免其内容被其他规则处理）
+      const blocks = [];
+      s = s.replace(/```([^\n]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+        const idx = blocks.length;
+        const label = lang ? `<span class="lang-label">${escapeHtml(lang)}</span>` : '';
+        blocks.push(`<pre>${label}<code>${code}</code></pre>`);
+        return `\x00BLK${idx}\x00`;
+      });
+
+      // 行内代码
+      s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+      // 粗体 / 斜体
+      s = s.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+      s = s.replace(/\*\*(.+?)\*\*/g,     '<strong>$1</strong>');
+      s = s.replace(/\*(.+?)\*/g,          '<em>$1</em>');
+
+      // 标题
+      s = s.replace(/^######\s+(.+)$/gm, '<h4>$1</h4>');
+      s = s.replace(/^#####\s+(.+)$/gm,  '<h4>$1</h4>');
+      s = s.replace(/^####\s+(.+)$/gm,   '<h4>$1</h4>');
+      s = s.replace(/^###\s+(.+)$/gm,    '<h3>$1</h3>');
+      s = s.replace(/^##\s+(.+)$/gm,     '<h3>$1</h3>');
+      s = s.replace(/^#\s+(.+)$/gm,      '<h3>$1</h3>');
+
+      // 引用块
+      s = s.replace(/^&gt;\s*(.+)$/gm, '<blockquote>$1</blockquote>');
+
+      // 水平线
+      s = s.replace(/^---+$/gm, '<hr>');
+
+      // 无序列表（简单处理）
+      s = s.replace(/^[*\-]\s+(.+)$/gm, '<li>$1</li>');
+      s = s.replace(/(<li>[\s\S]*?<\/li>)/g, '<ul>$1</ul>');
+      // 合并相邻 ul
+      s = s.replace(/<\/ul>\s*<ul>/g, '');
+
+      // 有序列表
+      s = s.replace(/^\d+\.\s+(.+)$/gm, '<li>$1</li>');
+
+      // 段落（双换行分隔）
+      const paragraphs = s.split(/\n\n+/);
+      s = paragraphs.map((p) => {
+        p = p.trim();
+        if (!p) return '';
+        if (/^<(h[1-6]|ul|ol|li|pre|blockquote|hr)/.test(p)) return p;
+        return '<p>' + p.replace(/\n/g, '<br>') + '</p>';
+      }).filter(Boolean).join('\n');
+
+      // 还原代码块
+      blocks.forEach((b, i) => { s = s.replace(`\x00BLK${i}\x00`, b); });
+
+      return s;
+    }
+
+    // ── 键盘事件 ──────────────────────────────────────────────
+    const input = document.getElementById('user-input');
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    input.addEventListener('input', () => autoGrow(input));
+
+    function autoGrow(el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+    }
+
+    // ── 系统提示词 ────────────────────────────────────────────
+    function toggleSysPanel() {
+      const p = document.getElementById('sys-panel');
+      const btn = document.getElementById('sys-btn');
+      const visible = p.style.display !== 'none';
+      p.style.display = visible ? 'none' : 'block';
+      btn.classList.toggle('active', !visible);
+    }
+
+    async function loadSystemPrompt() {
+      try {
+        const r = await fetch('/api/system-prompt');
+        const { prompt } = await r.json();
+        const ta = document.getElementById('sys-prompt-input');
+        ta.value = prompt || '';
+        updateSysCharCount();
+        updateSysIndicator();
+      } catch { /* 静默 */ }
+    }
+
+    async function saveSystemPrompt() {
+      const ta = document.getElementById('sys-prompt-input');
+      const btn = document.querySelector('.sys-save');
+      btn.disabled = true;
+      try {
+        const r = await fetch('/api/system-prompt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: ta.value }),
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        btn.textContent = '已保存 ✓';
+        btn.classList.add('saved');
+        setTimeout(() => {
+          btn.textContent = '保存';
+          btn.classList.remove('saved');
+        }, 1500);
+        updateSysIndicator();
+      } catch (err) {
+        btn.textContent = '保存失败 ✗';
+        btn.style.background = 'var(--red)';
+        setTimeout(() => {
+          btn.textContent = '保存';
+          btn.style.background = '';
+        }, 2000);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function updateSysCharCount() {
+      const ta = document.getElementById('sys-prompt-input');
+      document.getElementById('sys-char-count').textContent = ta.value.length;
+    }
+
+    function updateSysIndicator() {
+      const ta = document.getElementById('sys-prompt-input');
+      document.getElementById('sys-indicator').classList.toggle('on', ta.value.trim().length > 0);
+    }
+
+    document.getElementById('sys-prompt-input').addEventListener('input', updateSysCharCount);
+
+    // ── 初始化 ───────────────────────────────────────────────
+    let shownIds = new Set();
+
+    pollStatus();
+    statusInterval = setInterval(pollStatus, 3000);
+    loadSystemPrompt();
+
+    // 每 5s 刷新队列徽章
+    setInterval(updateQueueBadge, 5000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,57 @@
+{
+  "manifest_version": 3,
+  "name": "WebAI Bridge",
+  "version": "4.0.0",
+  "description": "连接本地服务器与 Gemini、ChatGPT 等 AI 平台，无需 API Key",
+
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
+
+  "permissions": [
+    "storage",
+    "alarms",
+    "tabs"
+  ],
+
+  "host_permissions": [
+    "https://gemini.google.com/*",
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "http://localhost/*"
+  ],
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "WebAI Bridge",
+    "default_icon": "icon.png"
+  },
+
+  "content_scripts": [
+    {
+      "matches": [
+        "https://gemini.google.com/*",
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": ["content-page.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://gemini.google.com/*",
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": ["content-isolated.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "webai-bridge",
+  "version": "4.0.0",
+  "description": "Convert Gemini, ChatGPT web interfaces to local OpenAI-compatible API without API keys",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ws": "^8.18.0"
+  }
+}
