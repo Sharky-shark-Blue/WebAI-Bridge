@@ -28,7 +28,10 @@ app.use(express.json({ limit: '50mb' }));
 
 // ─── CORS：允许所有来源（本地 app / Cherry Studio / Open WebUI 等）────
 app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin || '';
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
@@ -99,7 +102,7 @@ function sanitizeMessage(raw) {
   const userMsgMatch = s.match(/【用户消息】\s*([\s\S]+)/);
   if (userMsgMatch) {
     s = userMsgMatch[1].trim();
-    console.log(`[Sanitize] 提取到【用户消息】: "${s}"`);
+    console.log(`[Sanitize] 提取到【用户消息】: ${s.length} 字符`);
   }
 
   // 剥离 Claude Code 的扩展思考内容
@@ -154,7 +157,7 @@ function sanitizeMessage(raw) {
     s = `${head}\n\n…[中间省略 ${s.length - MAX_MESSAGE_CHARS} 字符]…\n\n${tail}`;
   }
 
-  console.log(`[Sanitize] 最终结果 (${original.length} → ${s.length} 字符): "${s}"`);
+  console.log(`[Sanitize] 最终结果 (${original.length} → ${s.length} 字符)`);
 
   return s;
 }
@@ -242,8 +245,6 @@ wss.on('connection', (ws) => {
       entry.reject(new Error('浏览器插件已断开连接'));
     }
     pending.clear();
-    // 排空队列，避免客户端重试堆积
-    drainQueue('浏览器插件已断开连接');
   });
 
   ws.on('error', () => {});

@@ -4,12 +4,12 @@ let savedUrl = 'ws://localhost:3000';
 
 function setDot(id, state) {
   const el = $(id);
-  el.className = 'dot' + (state === 'ok' ? ' ok' : state === 'checking' ? ' checking' : '');
+  el.className = 'status-dot' + (state === 'ok' ? ' ok' : state === 'checking' ? ' checking' : state === 'err' ? ' error' : '');
 }
 function setVal(id, text, cls) {
   const el = $(id);
   el.textContent = text;
-  el.className = 'diag-val ' + (cls || '');
+  el.className = 'status-val ' + (cls === 'err' ? 'error' : cls || '');
 }
 function showHint(msg) {
   const b = $('hint-box');

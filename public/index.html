@@ -1106,7 +1106,8 @@
 
     function updateSysIndicator() {
       const ta = document.getElementById('sys-prompt-input');
-      document.getElementById('sys-indicator').classList.toggle('on', ta.value.trim().length > 0);
+      const ind = document.getElementById('sys-indicator');
+      if (ind) ind.classList.toggle('on', ta.value.trim().length > 0);
     }
 
     document.getElementById('sys-prompt-input').addEventListener('input', updateSysCharCount);
