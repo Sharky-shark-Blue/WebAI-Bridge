@@ -217,16 +217,5 @@ Content-Type: application/json
 MIT License - 详见 [LICENSE](LICENSE) 文件
 
 ---
-
-## 🙏 致谢
-
 本项目开发过程中使用了 **Claude**（Anthropic）提供的 AI 辅助编程支持。
-
-### Contributors
-
-<!-- Contributors START -->
-[Sharky-shark-Blue](https://github.com/Sharky-shark-Blue) | [Blue Sharky-shark](https://github.com/Blue-Sharky-shark) | [Claude](https://github.com/anthropics/claude-code)
-<!-- Contributors END -->
-
-感谢所有为这个项目做出贡献的开发者！
 **Made with ❤️ by the community**
