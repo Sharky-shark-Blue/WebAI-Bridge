@@ -4,240 +4,405 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=200">
 <title>WebAI Bridge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg:        #1a1a2e;
-    --surface:   #16213e;
-    --surface2:  #0f3460;
-    --accent:    #e94560;
-    --accent2:   #533483;
-    --text:      #e0e0e0;
-    --text-dim:  #888;
-    --green:     #4caf50;
-    --orange:    #ff9800;
-    --red:       #e94560;
-    --radius:    8px;
-    --font:      -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --bg-deep: #030305;
+    --bg-surface: #0a0a12;
+    --bg-elevated: #12121c;
+    --border: rgba(255, 255, 255, 0.06);
+    --border-bright: rgba(255, 255, 255, 0.12);
+    --accent: #00ffc8;
+    --accent-dim: rgba(0, 255, 200, 0.5);
+    --accent-glow: rgba(0, 255, 200, 0.4);
+    --accent-secondary: #8b5cf6;
+    --text: #f0f0f5;
+    --text-dim: rgba(255, 255, 255, 0.4);
+    --text-muted: rgba(255, 255, 255, 0.6);
+    --green: #10b981;
+    --orange: #f59e0b;
+    --red: #ef4444;
+    --radius: 10px;
+    --font: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
-    width: 290px;
-    background: var(--bg);
+    width: 300px;
+    background: var(--bg-deep);
     color: var(--text);
     font-family: var(--font);
     font-size: 13px;
-    padding: 14px 16px 16px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
   }
 
+  /* Subtle ambient glow */
+  body::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle at 30% 20%, rgba(0, 255, 200, 0.03) 0%, transparent 50%);
+    pointer-events: none;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     HEADER
+  ═══════════════════════════════════════════════════════════════ */
   h1 {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
-    margin-bottom: 12px;
+    margin-bottom: 14px;
     display: flex;
     align-items: center;
-    gap: 8px;
-    color: #fff;
-    letter-spacing: 0.3px;
+    gap: 10px;
+    color: var(--text);
+    letter-spacing: -0.2px;
+    position: relative;
   }
+
   h1 .logo {
-    width: 18px; height: 18px;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    border-radius: 4px;
+    width: 26px; height: 26px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
+    border-radius: 7px;
     flex-shrink: 0;
-  }
-
-  /* ── 诊断面板 ── */
-  .diag-panel {
-    background: var(--surface);
-    border-radius: var(--radius);
-    padding: 8px 10px;
-    margin-bottom: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-  }
-
-  .diag-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: center;
+    font-size: 14px;
+    color: #030305;
+    box-shadow: 0 2px 12px var(--accent-glow);
   }
 
-  .dot {
-    width: 7px; height: 7px;
+  h1 .title {
+    background: linear-gradient(90deg, var(--text), var(--text-dim));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     STATUS PANEL (Glassmorphism)
+  ═══════════════════════════════════════════════════════════════ */
+  .status-panel {
+    background: rgba(18, 18, 28, 0.8);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    margin-bottom: 14px;
+  }
+
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+  }
+
+  .status-row:not(:last-child) {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .status-dot {
+    width: 8px; height: 8px;
     border-radius: 50%;
-    background: var(--red);
     flex-shrink: 0;
-    transition: background 0.3s;
+    transition: all 0.3s;
   }
-  .dot.ok       { background: var(--green); box-shadow: 0 0 5px var(--green); }
-  .dot.checking { background: var(--orange); }
 
-  .diag-label {
+  .status-dot.ok {
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent-glow), 0 0 20px rgba(0, 255, 200, 0.2);
+  }
+
+  .status-dot.checking {
+    background: var(--orange);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  .status-dot.error {
+    background: var(--red);
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .status-label {
     font-size: 11px;
     color: var(--text-dim);
-    width: 70px;
+    width: 68px;
     flex-shrink: 0;
   }
-  .diag-val {
+
+  .status-val {
     font-size: 11px;
-    color: var(--text);
+    color: var(--text-muted);
     flex: 1;
+    text-align: right;
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
+    transition: color 0.3s;
   }
-  .diag-val.err { color: var(--red); }
-  .diag-val.ok  { color: var(--green); }
 
-  /* ── 提示框 ── */
+  .status-val.ok { color: var(--accent); }
+  .status-val.error { color: var(--red); }
+
+  /* ═══════════════════════════════════════════════════════════════
+     ERROR HINT
+  ═══════════════════════════════════════════════════════════════ */
   .hint-box {
-    background: rgba(233,69,96,0.12);
-    border: 1px solid rgba(233,69,96,0.3);
-    border-radius: 6px;
-    padding: 7px 10px;
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 8px;
+    padding: 9px 11px;
     font-size: 11px;
     line-height: 1.5;
-    color: #f0a0b0;
-    margin-bottom: 12px;
+    color: rgba(252, 165, 165, 0.9);
+    margin-bottom: 14px;
     display: none;
   }
+
   .hint-box.show { display: block; }
 
-  /* ── 表单 ── */
+  /* ═══════════════════════════════════════════════════════════════
+     FORM FIELDS
+  ═══════════════════════════════════════════════════════════════ */
+  .form-group {
+    margin-bottom: 14px;
+  }
+
   label {
     display: block;
     font-size: 11px;
     color: var(--text-dim);
-    margin-bottom: 5px;
+    margin-bottom: 6px;
+    font-weight: 500;
+    letter-spacing: -0.1px;
   }
 
   input[type="text"] {
     width: 100%;
-    padding: 7px 10px;
-    background: var(--surface);
-    border: 1px solid #2a2a4a;
-    border-radius: var(--radius);
+    padding: 10px 12px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
     color: var(--text);
     font-size: 12px;
-    font-family: "Cascadia Code", "Consolas", monospace;
+    font-family: 'JetBrains Mono', 'Consolas', monospace;
     outline: none;
-    transition: border-color 0.2s;
+    transition: all 0.2s;
   }
-  input[type="text"]:focus { border-color: var(--accent2); }
 
-  /* ── 延迟设置 ── */
-  .delay-section {
-    margin-top: 12px;
+  input[type="text"]:focus {
+    border-color: var(--accent-dim);
+    box-shadow: 0 0 0 3px rgba(0, 255, 200, 0.08);
   }
+
+  input[type="text"]::placeholder {
+    color: var(--text-dim);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     DELAY SETTINGS
+  ═══════════════════════════════════════════════════════════════ */
+  .delay-section {
+    margin-top: 16px;
+  }
+
   .delay-row {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-top: 5px;
+    gap: 8px;
   }
+
   .delay-row input[type="number"] {
-    width: 62px;
-    padding: 6px 8px;
-    background: var(--surface);
-    border: 1px solid #2a2a4a;
-    border-radius: var(--radius);
+    width: 68px;
+    padding: 8px 10px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
     color: var(--text);
     font-size: 12px;
     font-family: inherit;
-    outline: none;
-    transition: border-color 0.2s;
     text-align: center;
+    outline: none;
+    transition: all 0.2s;
   }
-  .delay-row input[type="number"]:focus { border-color: var(--accent2); }
-  .delay-sep { font-size: 11px; color: var(--text-dim); }
-  .delay-unit { font-size: 11px; color: var(--text-dim); }
+
+  .delay-row input[type="number"]:focus {
+    border-color: var(--accent-dim);
+    box-shadow: 0 0 0 3px rgba(0, 255, 200, 0.08);
+  }
+
+  .delay-sep {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .delay-unit {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-left: 2px;
+  }
+
   .delay-preview {
     font-size: 10px;
-    color: var(--accent2);
-    margin-top: 4px;
+    color: var(--accent-dim);
+    margin-top: 6px;
+    letter-spacing: -0.1px;
   }
+
+  /* ═══════════════════════════════════════════════════════════════
+     BUTTONS
+  ═══════════════════════════════════════════════════════════════ */
   .btn-row {
     display: flex;
-    gap: 8px;
-    margin-top: 10px;
+    gap: 10px;
+    margin-top: 16px;
   }
+
   button {
     flex: 1;
-    padding: 7px 0;
+    padding: 10px 0;
     border: none;
-    border-radius: var(--radius);
+    border-radius: 8px;
     font-size: 12px;
     font-weight: 600;
+    font-family: inherit;
     cursor: pointer;
-    transition: opacity 0.15s;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
   }
-  button:hover { opacity: 0.85; }
-  button:active { opacity: 0.7; }
 
-  .btn-save     { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; }
-  .btn-reconnect{ background: var(--surface2); color: var(--text); }
-
-  /* ── 底部 ── */
-  .footer {
-    margin-top: 14px;
-    text-align: center;
+  button::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
+    opacity: 0;
+    transition: opacity 0.25s;
   }
-  .footer a {
-    color: var(--accent2);
-    text-decoration: none;
-    font-size: 12px;
-  }
-  .footer a:hover { color: var(--accent); }
 
+  button:hover { transform: translateY(-1px); }
+  button:active { transform: translateY(0); }
+
+  .btn-save {
+    background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
+    color: #030305;
+    box-shadow: 0 4px 16px var(--accent-glow);
+  }
+
+  .btn-save:hover {
+    box-shadow: 0 6px 24px rgba(0, 255, 200, 0.4);
+  }
+
+  .btn-reconnect {
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+  }
+
+  .btn-reconnect:hover {
+    border-color: var(--border-bright);
+    color: var(--text);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     TOAST
+  ═══════════════════════════════════════════════════════════════ */
   .toast {
     font-size: 11px;
     text-align: center;
-    margin-top: 7px;
+    margin-top: 10px;
     height: 14px;
-    color: var(--green);
+    color: var(--accent);
     opacity: 0;
     transition: opacity 0.3s;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     FOOTER
+  ═══════════════════════════════════════════════════════════════ */
+  .footer {
+    margin-top: 16px;
+    text-align: center;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  .footer a {
+    color: var(--accent-dim);
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+
+  .footer a:hover {
+    color: var(--accent);
+  }
+
+  /* Reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 </style>
 </head>
 <body>
 
-<h1><span class="logo"></span>WebAI Bridge</h1>
+<h1><span class="logo">◈</span><span class="title">WebAI Bridge</span></h1>
 
-<!-- 三级诊断 -->
-<div class="diag-panel">
-  <div class="diag-row">
-    <span class="dot checking" id="dot-sw"></span>
-    <span class="diag-label">后台脚本</span>
-    <span class="diag-val" id="val-sw">检测中…</span>
+<!-- Status Panel -->
+<div class="status-panel">
+  <div class="status-row">
+    <span class="status-dot checking" id="dot-sw"></span>
+    <span class="status-label">后台脚本</span>
+    <span class="status-val" id="val-sw">检测中…</span>
   </div>
-  <div class="diag-row">
-    <span class="dot checking" id="dot-srv"></span>
-    <span class="diag-label">本地服务器</span>
-    <span class="diag-val" id="val-srv">检测中…</span>
+  <div class="status-row">
+    <span class="status-dot checking" id="dot-srv"></span>
+    <span class="status-label">本地服务器</span>
+    <span class="status-val" id="val-srv">检测中…</span>
   </div>
-  <div class="diag-row">
-    <span class="dot checking" id="dot-ws"></span>
-    <span class="diag-label">WebSocket桥</span>
-    <span class="diag-val" id="val-ws">检测中…</span>
+  <div class="status-row">
+    <span class="status-dot checking" id="dot-ws"></span>
+    <span class="status-label">WebSocket</span>
+    <span class="status-val" id="val-ws">检测中…</span>
   </div>
-  <div class="diag-row">
-    <span class="dot checking" id="dot-platform"></span>
-    <span class="diag-label">当前平台</span>
-    <span class="diag-val" id="val-platform">检测中…</span>
+  <div class="status-row">
+    <span class="status-dot checking" id="dot-platform"></span>
+    <span class="status-label">当前平台</span>
+    <span class="status-val" id="val-platform">检测中…</span>
   </div>
 </div>
 
-<!-- 错误提示 -->
+<!-- Error Hint -->
 <div class="hint-box" id="hint-box"></div>
 
-<label>WebSocket 服务器地址</label>
-<input type="text" id="server-url" placeholder="ws://localhost:3000" spellcheck="false">
+<!-- Server URL -->
+<div class="form-group">
+  <label>WebSocket 服务器</label>
+  <input type="text" id="server-url" placeholder="ws://localhost:3000" spellcheck="false">
+</div>
 
-<!-- 延迟设置 -->
+<!-- Delay Settings -->
 <div class="delay-section">
   <label>随机延迟（防检测）</label>
   <div class="delay-row">
@@ -249,13 +414,16 @@
   <div class="delay-preview" id="delay-preview">每次发送前随机延迟 500–1500 ms</div>
 </div>
 
+<!-- Buttons -->
 <div class="btn-row">
-  <button class="btn-save"      id="btn-save">保存 &amp; 连接</button>
+  <button class="btn-save" id="btn-save">保存并连接</button>
   <button class="btn-reconnect" id="btn-reconnect">重连</button>
 </div>
 
+<!-- Toast -->
 <div class="toast" id="toast"></div>
 
+<!-- Footer -->
 <div class="footer">
   <a href="http://localhost:3000" target="_blank">打开聊天界面 →</a>
 </div>

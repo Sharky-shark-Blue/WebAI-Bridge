@@ -159,10 +159,6 @@ function sanitizeMessage(raw) {
   return s;
 }
 
-// ─── 队列配置 ────────────────────────────────────────────────
-const MAX_QUEUE_LENGTH = Number(process.env.MAX_QUEUE_LENGTH ?? 3);
-const DEDUP_WINDOW_MS = 30_000;  // 30s 内相同消息去重
-
 // ─── 系统提示词（UI 配置，应用于所有外部转发请求）─────────────
 const SYSTEM_PROMPT_FILE = path.join(__dirname, 'system-prompt.txt');
 let systemPrompt = '';
@@ -182,97 +178,6 @@ function addHistory(entry) {
   history.push(entry);
   if (history.length > 200) history.shift();
 }
-
-// ─── 转发队列（外部 API → UI 代为发送）───────────────────────
-// 外部调用 /api/queue 推入消息；UI 调用 /api/queue/next 取出并通过自己的输入框发送
-// UI 发送完毕后调用 /api/queue/done 把结果写回，外部轮询 /api/queue/result/:qid
-const forwardQueue = [];   // { qid, message, ts }
-const queueResults = new Map();  // qid → { text?, error?, ts }
-const recentMessages = new Map();// message → { qid, ts }   跨"队列/处理中/已完成"共享去重
-const inFlight = new Map();      // qid → { message, ts } 已被 UI 取走但尚未完成
-
-// 定期清理过期记录
-setInterval(() => {
-  const cutoff = Date.now() - 60_000;
-  for (const [k, v] of recentMessages) if (v.ts < cutoff) recentMessages.delete(k);
-  for (const [k, v] of queueResults) if (v.ts && v.ts < cutoff) queueResults.delete(k);
-  for (const [k, v] of inFlight) if (v.ts < cutoff - 120_000) inFlight.delete(k);
-}, 30_000);
-
-// 入队：去重 + 上限保护；返回 { qid, reason? }
-function enqueueMessage(message) {
-  const now = Date.now();
-  // 1) 队列中已有相同消息 → 复用
-  const inQueue = forwardQueue.find((i) => i.message === message);
-  if (inQueue) {
-    console.log(`[queue] dedup 命中（队列中） qid=${inQueue.qid}`);
-    return { qid: inQueue.qid, dedup: true };
-  }
-  // 2) 正在被 UI 处理 → 复用 qid，调用方会轮询到同一个 result
-  for (const [qid, entry] of inFlight) {
-    if (entry.message === message) {
-      console.log(`[queue] dedup 命中（处理中） qid=${qid}`);
-      return { qid, dedup: true };
-    }
-  }
-  // 3) 最近（30s 内）已完成过同样的消息 → 直接复用已缓存的 qid/result
-  const recent = recentMessages.get(message);
-  if (recent && now - recent.ts < DEDUP_WINDOW_MS) {
-    console.log(`[queue] dedup 命中（最近完成） qid=${recent.qid}`);
-    return { qid: recent.qid, dedup: true };
-  }
-  if (forwardQueue.length >= MAX_QUEUE_LENGTH) {
-    return { qid: null, reason: `队列已满（${MAX_QUEUE_LENGTH} 条），请稍后重试或打开 UI 自动转发` };
-  }
-  const qid = randomUUID();
-  forwardQueue.push({ qid, message, ts: now });
-  recentMessages.set(message, { qid, ts: now });
-  return { qid };
-}
-
-// 清空队列并通知所有 pending：用于 WS 断开时快速失败
-function drainQueue(reason) {
-  if (!forwardQueue.length && !queueResults.size) return;
-  console.log(`[queue] 清空队列（${forwardQueue.length} 在队）原因：${reason}`);
-  for (const item of forwardQueue) {
-    queueResults.set(item.qid, { text: null, error: reason, ts: Date.now() });
-  }
-  forwardQueue.length = 0;
-}
-
-app.post('/api/queue', (req, res) => {
-  const message = sanitizeMessage(String(req.body?.message ?? '').trim());
-  if (!message) return res.status(400).json({ error: 'message 不能为空' });
-  const enq = enqueueMessage(message);
-  if (!enq.qid) return res.status(429).json({ error: enq.reason });
-  res.json({ qid: enq.qid, dedup: enq.dedup ?? false });
-});
-
-app.get('/api/queue/next', (_req, res) => {
-  const item = forwardQueue.shift() ?? null;
-  if (item) inFlight.set(item.qid, { message: item.message, ts: Date.now() });
-  res.json({ item });
-});
-
-app.post('/api/queue/done', (req, res) => {
-  const { qid, text, error } = req.body ?? {};
-  if (!qid) return res.status(400).json({ error: 'qid 必填' });
-  queueResults.set(qid, { text: text ?? null, error: error ?? null, ts: Date.now() });
-  inFlight.delete(qid);
-  addHistory({ id: qid, ts: Date.now(), user: req.body?.message ?? '', assistant: text ?? null, error: error ?? null });
-  res.json({ ok: true });
-});
-
-app.get('/api/queue/result/:qid', (req, res) => {
-  const result = queueResults.get(req.params.qid);
-  if (!result) return res.json({ status: 'pending' });
-  // 不立即删除，让重复的轮询器 / 去重客户端都能读到；setInterval 会 60s 后清理
-  res.json({ status: 'done', ...result });
-});
-
-app.get('/api/queue/length', (_req, res) => {
-  res.json({ length: forwardQueue.length });
-});
 
 // ─── 系统提示词：GET / POST ─────────────────────────────────
 app.get('/api/system-prompt', (_req, res) => {
@@ -399,32 +304,8 @@ app.post('/api/chat', async (req, res) => {
     }
   }
 
-  // ── 降级路径：插件未连接，走队列（需 UI + 自动转发）──
-  console.log('[/api/chat] 插件未连接，降级走队列');
-  const enq = enqueueMessage(message);
-  if (!enq.qid) return res.status(429).json({ error: enq.reason });
-  const qid = enq.qid;
-  console.log(`[/api/chat] 推入队列 qid=${qid}${enq.dedup ? ' (dedup)' : ''}`);
-
-  res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Transfer-Encoding', 'chunked');
-  res.setHeader('X-Accel-Buffering', 'no');
-  res.flushHeaders();
-
-  const deadline = Date.now() + 120_000;
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 500));
-    if (res.closed || res.destroyed) return;
-    const result = queueResults.get(qid);
-    if (result) {
-      if (result.error) { res.end(JSON.stringify({ error: result.error })); return; }
-      res.end(JSON.stringify({ text: result.text }));
-      return;
-    }
-  }
-  const idx = forwardQueue.findIndex((i) => i.qid === qid);
-  if (idx !== -1) forwardQueue.splice(idx, 1);
-  res.end(JSON.stringify({ error: 'UI 转发超时（120s），请确保 UI 页面已打开且自动转发已启用' }));
+  // 插件未连接，直接返回错误
+  return res.status(503).json({ error: '浏览器插件未连接，请在 Chrome 中打开 AI 平台页面' });
 });
 
 // ─── POST /api/send  (UI 直接发送，绕开队列，走 WS 路径）────
@@ -613,90 +494,8 @@ app.post('/v1/chat/completions', async (req, res) => {
     }
   }
 
-  // ── 降级路径：插件未连接，走队列（需 UI + 自动转发）──
-  console.log('[/v1/chat/completions] 插件未连接，降级走队列');
-  const enq = enqueueMessage(message);
-  if (!enq.qid) {
-    return res.status(429).json({ error: { message: enq.reason, type: 'rate_limit_error' } });
-  }
-  const qid = enq.qid;
-  console.log(`[/v1/chat/completions] 推入队列 qid=${qid}${enq.dedup ? ' (dedup)' : ''} stream=${wantStream}`);
-
-  if (wantStream) {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-  } else {
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Transfer-Encoding', 'chunked');
-    res.setHeader('X-Accel-Buffering', 'no');
-  }
-  res.flushHeaders();
-
-  let tick = 0;
-  const deadline = Date.now() + 300_000; // 5 分钟超时
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 500));
-    tick++;
-    // 客户端断连则弃等
-    if (res.closed || res.destroyed) {
-      const idx = forwardQueue.findIndex((i) => i.qid === qid);
-      if (idx !== -1) forwardQueue.splice(idx, 1);
-      return;
-    }
-    // streaming 每 15s 发一次 SSE keepalive，重置客户端 receiveTimeout 计时器
-    if (wantStream && tick % 30 === 0) res.write(': ping\n\n');
-
-    const result = queueResults.get(qid);
-    if (!result) continue;
-
-    const errBody = result.error
-      ? JSON.stringify({ error: { message: result.error, type: 'server_error' } })
-      : null;
-
-    if (errBody) {
-      if (wantStream) { res.write(`data: ${errBody}\n\n`); res.end(); }
-      else res.end(errBody);
-      return;
-    }
-
-    const text = result.text ?? '';
-    if (wantStream) {
-      // 伪流式：分块挂流（Gemini 只能一次性得到完整结果）
-      const chunkSize = 40;
-      for (let i = 0; i < text.length; i += chunkSize) {
-        res.write(`data: ${JSON.stringify({
-          id: `chatcmpl-${qid}`, object: 'chat.completion.chunk', created: createdSec, model,
-          choices: [{ index: 0, delta: { content: text.slice(i, i + chunkSize) }, finish_reason: null }],
-        })}\n\n`);
-      }
-      res.write(`data: ${JSON.stringify({
-        id: `chatcmpl-${qid}`, object: 'chat.completion.chunk', created: createdSec, model,
-        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
-      })}\n\n`);
-      res.write('data: [DONE]\n\n');
-      res.end();
-    } else {
-      res.end(JSON.stringify({
-        id: `chatcmpl-${qid}`, object: 'chat.completion', created: createdSec, model,
-        choices: [{ index: 0, message: { role: 'assistant', content: text }, finish_reason: 'stop' }],
-        usage: {
-          prompt_tokens: Math.ceil(message.length / 4),
-          completion_tokens: Math.ceil(text.length / 4),
-          total_tokens: Math.ceil((message.length + text.length) / 4),
-        },
-      }));
-    }
-    return;
-  }
-
-  // 超时
-  const sidx = forwardQueue.findIndex((i) => i.qid === qid);
-  if (sidx !== -1) forwardQueue.splice(sidx, 1);
-  const errMsg = 'UI 转发超时（5 分钟），请确保 UI 已打开且自动转发已启用';
-  const timeoutBody = JSON.stringify({ error: { message: errMsg, type: 'server_error' } });
-  if (wantStream) { res.write(`data: ${timeoutBody}\n\n`); res.end(); }
-  else res.end(timeoutBody);
+  // 插件未连接，直接返回错误
+  return res.status(503).json({ error: { message: '浏览器插件未连接，请在 Chrome 中打开 AI 平台页面', type: 'server_error' } });
 });
 
 // ─── 启动 ───────────────────────────────────────────────────
