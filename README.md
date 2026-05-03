@@ -218,16 +218,4 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 
 ---
 
-## 🙏 致谢
-
-### Contributors
-
-<!-- Contributors START -->
-[Sharky-shark-Blue](https://github.com/Sharky-shark-Blue) | [Blue Sharky-shark](https://github.com/Blue-Sharky-shark) | [Claude](https://github.com/anthropics/claude-code)
-<!-- Contributors END -->
-
-感谢所有为这个项目做出贡献的开发者！
-
----
-
 **Made with ❤️ by the community**
